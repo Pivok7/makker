@@ -1,10 +1,32 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
-const c_allocator = std.heap.c_allocator;
+const embed_main_c = @embedFile("templates/c/main.c");
+const embed_main_cpp = @embedFile("templates/cpp/main.cpp");
+const embed_main_zig = @embedFile("templates/zig/main.zig");
+const embed_build_zig = @embedFile("templates/zig/build.zig");
+
+const Templates = enum{
+    none,
+    new,
+    init_c,
+    init_cpp,
+    init_zig,
+};
 
 const Flags = packed struct{
     silent: bool = false,
 };
+
+fn printHelp() void {
+    std.debug.print("How to use?\n", .{});
+    std.debug.print("-> makker [template]\n\n", .{});
+    std.debug.print("Try one of the templates:\n", .{});
+    std.debug.print("-> new\n", .{});
+    std.debug.print("-> init-c\n", .{});
+    std.debug.print("-> init-cpp\n", .{});
+    std.debug.print("-> init-zig\n", .{});
+}
 
 fn fileExists(file_path: []const u8) !bool {
     std.fs.cwd().access(file_path, .{}) catch |err| switch (err) {
@@ -22,65 +44,209 @@ fn addStep(flags: Flags, arr: *std.ArrayList(u8), step: []const u8, body: []cons
     try arr.appendSlice("\n\n");
 }
 
-pub fn main() !void {
+fn askOverride(allocator: Allocator, file_name: []const u8) !bool {
     const stdin = std.io.getStdIn().reader();
 
-    var flags: Flags = .{};
+    if (try fileExists(file_name)) {
+        std.debug.print("{s} already exists!\n", .{file_name});
+        std.debug.print("Do you want to override? [y/N] ", .{});
+        const choice = (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 64)).?;
+        defer allocator.free(choice);
 
-    const args = try std.process.argsAlloc(c_allocator);
-    errdefer std.process.argsFree(c_allocator, args);
+        if (!std.mem.eql(u8, choice, "y") and !std.mem.eql(u8, choice, "Y")) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = false }){};
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
+
+
+    var flags: Flags = .{};
+    var template = Templates.none;
+
+    const args = try std.process.argsAlloc(allocator);
+    errdefer std.process.argsFree(allocator, args);
 
     for (args[1..]) |arg| {
         if (std.mem.eql(u8, arg, "-s")) {
             flags.silent = true;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "new")) {
+            template = Templates.new;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "init-c")) {
+            template = Templates.init_c;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "init-cpp")) {
+            template = Templates.init_cpp;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "init-zig")) {
+            template = Templates.init_zig;
+            continue;
         }
     }
 
-    if (try fileExists("Makefile")) {
-        std.debug.print("Makefile already exists!\n", .{});
-        std.debug.print("Do you want to override? [y/N] ", .{});
-        const choice = (try stdin.readUntilDelimiterOrEofAlloc(c_allocator, '\n', 64)).?;
-        defer c_allocator.free(choice);
-        if (!std.mem.eql(u8, choice, "y") and !std.mem.eql(u8, choice, "Y")) {
-            std.debug.print("Exiting\n", .{});
-            return error.MakefileExists;
-        }
+    switch (template) {
+        .none => printHelp(),
+        .new => {
+            try templateNew(allocator, flags);
+        },
+        .init_c => {
+            try templateC(allocator, flags);
+        },
+        .init_cpp => {
+            try templateCpp(allocator, flags);
+        },
+        .init_zig => {
+            try templateZig(allocator, flags);
+        },
     }
 
-    var contents = std.ArrayList(u8).init(c_allocator);
+}
+
+fn templateNew(allocator: Allocator, flags: Flags) !void {
+    if (try askOverride(allocator, "Makefile")) {
+        const stdin = std.io.getStdIn().reader();
+
+        var contents = std.ArrayList(u8).init(allocator);
+        defer contents.deinit(); 
+
+        std.debug.print("build:\n", .{});
+        const build_step = (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024)).?;
+        defer allocator.free(build_step);
+        if (build_step.len > 0) {
+            try addStep(flags, &contents, "build:", build_step);
+            std.debug.print("\n", .{});
+        } else {
+            std.debug.print("Build step can't be empty!\n", .{});
+            return error.EmptyBuildStep;
+        }
+
+        std.debug.print("run:\n", .{});
+        const run_step = (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024)).?;
+        defer allocator.free(run_step);
+        if (run_step.len > 0) {
+            try addStep(flags, &contents, "run: build", run_step);
+            std.debug.print("\n", .{});
+        }
+
+        std.debug.print("clean:\n", .{});
+        const clean_step = (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024)).?;
+        defer allocator.free(clean_step);
+        if (clean_step.len > 0) {
+            try addStep(flags, &contents, "clean:", clean_step);
+        }
+
+        const file = try std.fs.cwd().createFile(
+            "Makefile",
+            .{ .read = true, },
+        );
+        defer file.close();
+
+        try file.writeAll(contents.items);
+    }
+}
+
+fn templateC(allocator: Allocator, flags: Flags) !void {
+    var contents = std.ArrayList(u8).init(allocator);
     defer contents.deinit(); 
 
-    std.debug.print("build:\n", .{});
-    const build_step = (try stdin.readUntilDelimiterOrEofAlloc(c_allocator, '\n', 1024)).?;
-    defer c_allocator.free(build_step);
-    if (build_step.len > 0) {
-        try addStep(flags, &contents, "build:", build_step);
-        std.debug.print("\n", .{});
-    } else {
-        std.debug.print("Build step can't be empty!\n", .{});
-        return error.EmptyBuildStep;
+    if (try askOverride(allocator, "main.c")) {
+        const main_c = try std.fs.cwd().createFile(
+            "main.c",
+            .{ .read = true, },
+        );
+        defer main_c.close();
+
+        try main_c.writeAll(embed_main_c);
+        std.debug.print("Created: main.c\n", .{});
     }
 
-    std.debug.print("run:\n", .{});
-    const run_step = (try stdin.readUntilDelimiterOrEofAlloc(c_allocator, '\n', 1024)).?;
-    defer c_allocator.free(run_step);
-    if (run_step.len > 0) {
-        try addStep(flags, &contents, "run: build", run_step);
-        std.debug.print("\n", .{});
+    if (try askOverride(allocator, "Makefile")) {
+        const makefile = try std.fs.cwd().createFile(
+            "Makefile",
+            .{ .read = true, },
+        );
+        defer makefile.close();
+
+        try addStep(flags, &contents, "build:", "gcc -o main main.c");
+        try addStep(flags, &contents, "run: build", "./main");
+        try addStep(flags, &contents, "clean:", "rm main");
+        try makefile.writeAll(contents.items);
+
+        std.debug.print("Created: Makefile\n", .{});
+    }
+}
+
+fn templateCpp(allocator: Allocator, flags: Flags) !void {
+    var contents = std.ArrayList(u8).init(allocator);
+    defer contents.deinit(); 
+
+    if (try askOverride(allocator, "main.cpp")) {
+        const main_cpp = try std.fs.cwd().createFile(
+            "main.cpp",
+            .{ .read = true, },
+        );
+        defer main_cpp.close();
+
+        try main_cpp.writeAll(embed_main_cpp);
+
+        std.debug.print("Created: main.cpp\n", .{});
     }
 
-    std.debug.print("clean:\n", .{});
-    const clean_step = (try stdin.readUntilDelimiterOrEofAlloc(c_allocator, '\n', 1024)).?;
-    defer c_allocator.free(clean_step);
-    if (clean_step.len > 0) {
-        try addStep(flags, &contents, "clean:", clean_step);
+    if (try askOverride(allocator, "Makefile")) {
+        const makefile = try std.fs.cwd().createFile(
+            "Makefile",
+            .{ .read = true, },
+        );
+        defer makefile.close();
+
+        try addStep(flags, &contents, "build:", "g++ -o main main.cpp");
+        try addStep(flags, &contents, "run: build", "./main");
+        try addStep(flags, &contents, "clean:", "rm main");
+        try makefile.writeAll(contents.items);
+
+        std.debug.print("Created: Makefile\n", .{});
+    }
+}
+
+fn templateZig(allocator: Allocator, _: Flags) !void {
+    var contents = std.ArrayList(u8).init(allocator);
+    defer contents.deinit(); 
+
+    if (try askOverride(allocator, "src/main.zig")) {
+        _ = try std.fs.cwd().makeOpenPath("src", .{});
+
+        const main_zig = try std.fs.cwd().createFile(
+            "src/main.zig",
+            .{ .read = true, },
+        );
+        defer main_zig.close();
+
+        try main_zig.writeAll(embed_main_zig);
+
+        std.debug.print("Created: main.zig\n", .{});
     }
 
-    const file = try std.fs.cwd().createFile(
-        "Makefile",
-        .{ .read = true, },
-    );
-    defer file.close();
+    if (try askOverride(allocator, "build.zig")) {
+        const build_zig = try std.fs.cwd().createFile(
+            "build.zig",
+            .{ .read = true, },
+        );
+        defer build_zig.close();
 
-    try file.writeAll(contents.items);
+        try build_zig.writeAll(embed_build_zig);
+
+        std.debug.print("Created: build.zig\n", .{});
+    }
 }
