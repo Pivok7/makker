@@ -65,7 +65,7 @@ pub fn main() !void {
     const run_step = (try stdin.readUntilDelimiterOrEofAlloc(c_allocator, '\n', 1024)).?;
     defer c_allocator.free(run_step);
     if (run_step.len > 0) {
-        try addStep(flags, &contents, "run:", run_step);
+        try addStep(flags, &contents, "run: build", run_step);
         std.debug.print("\n", .{});
     }
 
