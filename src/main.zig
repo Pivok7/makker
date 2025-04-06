@@ -23,12 +23,15 @@ const Flags = packed struct{
 
 fn printHelp() void {
     std.debug.print("How to use?\n", .{});
-    std.debug.print("-> makker [template]\n\n", .{});
-    std.debug.print("Try one of the templates:\n", .{});
+    std.debug.print("-> makker [template]\n", .{});
+    std.debug.print("\nTemplates:\n", .{});
     std.debug.print("-> new\n", .{});
     std.debug.print("-> init-c\n", .{});
     std.debug.print("-> init-cpp\n", .{});
     std.debug.print("-> init-zig\n", .{});
+    std.debug.print("-> \nFlags:\n", .{});
+    std.debug.print("-> -s    --silent    Make Makefile silent:\n", .{});
+    std.debug.print("-> -w    --warn      Add basic warnings\n", .{});
 }
 
 fn fileExists(file_path: []const u8) !bool {
@@ -69,7 +72,6 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-
     var flags: Flags = .{};
     var template = Templates.none;
 
@@ -77,11 +79,15 @@ pub fn main() !void {
     errdefer std.process.argsFree(allocator, args);
 
     for (args[1..]) |arg| {
-        if (std.mem.eql(u8, arg, "-s")) {
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            printHelp();
+            std.process.exit(0);
+        }
+        else if (std.mem.eql(u8, arg, "-s") or (std.mem.eql(u8, arg, "--silent"))) {
             flags.silent = true;
             continue;
         }
-        else if (std.mem.eql(u8, arg, "-w")) {
+        else if (std.mem.eql(u8, arg, "-w") or (std.mem.eql(u8, arg, "--warn"))) {
             flags.warnings = true;
             continue;
         }
