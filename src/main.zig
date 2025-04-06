@@ -6,6 +6,8 @@ const embed_main_cpp = @embedFile("templates/cpp/main.cpp");
 const embed_main_zig = @embedFile("templates/zig/main.zig");
 const embed_build_zig = @embedFile("templates/zig/build.zig");
 
+const c_warn_flags: []const u8 = "-Wall -Wextra -Wno-unused -pedantic";
+
 const Templates = enum{
     none,
     new,
@@ -16,6 +18,7 @@ const Templates = enum{
 
 const Flags = packed struct{
     silent: bool = false,
+    warnings: bool = false,
 };
 
 fn printHelp() void {
@@ -78,21 +81,29 @@ pub fn main() !void {
             flags.silent = true;
             continue;
         }
-        if (std.mem.eql(u8, arg, "new")) {
+        else if (std.mem.eql(u8, arg, "-w")) {
+            flags.warnings = true;
+            continue;
+        }
+        else if (std.mem.eql(u8, arg, "new")) {
             template = Templates.new;
             continue;
         }
-        if (std.mem.eql(u8, arg, "init-c")) {
+        else if (std.mem.eql(u8, arg, "init-c")) {
             template = Templates.init_c;
             continue;
         }
-        if (std.mem.eql(u8, arg, "init-cpp")) {
+        else if (std.mem.eql(u8, arg, "init-cpp")) {
             template = Templates.init_cpp;
             continue;
         }
-        if (std.mem.eql(u8, arg, "init-zig")) {
+        else if (std.mem.eql(u8, arg, "init-zig")) {
             template = Templates.init_zig;
             continue;
+        }
+        else {
+            std.log.err("Unrecognized argument: {s}", .{arg});
+            std.process.exit(2);
         }
     }
 
@@ -179,7 +190,12 @@ fn templateC(allocator: Allocator, flags: Flags) !void {
         );
         defer makefile.close();
 
-        try addStep(flags, &contents, "build:", "gcc -o main main.c");
+        if (flags.warnings) {
+            try contents.appendSlice("warn_flags = " ++ c_warn_flags ++ "\n\n");
+            try addStep(flags, &contents, "build:", "gcc -o main main.c $(warn_flags)");
+        } else {
+            try addStep(flags, &contents, "build:", "gcc -o main main.c");
+        }
         try addStep(flags, &contents, "run: build", "./main");
         try addStep(flags, &contents, "clean:", "rm main");
         try makefile.writeAll(contents.items);
@@ -211,7 +227,12 @@ fn templateCpp(allocator: Allocator, flags: Flags) !void {
         );
         defer makefile.close();
 
-        try addStep(flags, &contents, "build:", "g++ -o main main.cpp");
+        if (flags.warnings) {
+            try contents.appendSlice("warn_flags = " ++ c_warn_flags ++ "\n\n");
+            try addStep(flags, &contents, "build:", "g++ -o main main.cpp $(warn_flags)");
+        } else {
+            try addStep(flags, &contents, "build:", "g++ -o main main.cpp");
+        }
         try addStep(flags, &contents, "run: build", "./main");
         try addStep(flags, &contents, "clean:", "rm main");
         try makefile.writeAll(contents.items);
