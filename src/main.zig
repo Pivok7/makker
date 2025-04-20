@@ -23,13 +23,13 @@ const Flags = packed struct{
 
 fn printHelp() void {
     std.debug.print("How to use?\n", .{});
-    std.debug.print("-> makker [template]\n", .{});
+    std.debug.print("-> makker [template] [flags]\n", .{});
     std.debug.print("\nTemplates:\n", .{});
     std.debug.print("-> new\n", .{});
     std.debug.print("-> init-c\n", .{});
     std.debug.print("-> init-cpp\n", .{});
     std.debug.print("-> init-zig\n", .{});
-    std.debug.print("-> \nFlags:\n", .{});
+    std.debug.print("\n-> Flags:\n", .{});
     std.debug.print("-> -s    --silent    Make Makefile silent:\n", .{});
     std.debug.print("-> -w    --warn      Add basic warnings\n", .{});
 }
@@ -105,6 +105,19 @@ pub fn main() !void {
         }
         else if (std.mem.eql(u8, arg, "init-zig")) {
             template = Templates.init_zig;
+            continue;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            for (arg) |char| {
+                switch (char) {
+                    '-' => continue,
+                    'w' => flags.warnings = true,
+                    's' => flags.silent = true,
+                    else => {
+                        std.log.err("Invalid flag \"{c}\"", .{char});
+                        std.process.exit(2);
+                    }
+                }
+            }
             continue;
         }
         else {
