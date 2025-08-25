@@ -47,7 +47,7 @@ fn stdinReadUntilDeliminerAlloc(allocator: Allocator, deliminer: u8) ![]const u8
     var stdin = std.fs.File.stdin().reader(&stdin_buf);
 
     var arr = std.ArrayList(u8){};
-    defer arr.clearAndFree(allocator);
+    defer arr.deinit(allocator);
 
     while (true) {
         const read = try stdin.interface.takeByte();
@@ -171,7 +171,7 @@ fn templateNew(allocator: Allocator, flags: Flags) !void {
     if (!try askOverride(allocator, "Makefile")) return;
 
     var contents = std.ArrayList(u8){};
-    defer contents.clearAndFree(allocator); 
+    defer contents.deinit(allocator);
 
     std.debug.print("build:\n", .{});
     const build_step = try stdinReadUntilDeliminerAlloc(allocator, '\n');
@@ -213,7 +213,7 @@ fn templateNew(allocator: Allocator, flags: Flags) !void {
 
 fn templateC(allocator: Allocator, flags: Flags) !void {
     var contents = std.ArrayList(u8){};
-    defer contents.clearAndFree(allocator); 
+    defer contents.deinit(allocator);
 
     if (try askOverride(allocator, "main.c")) {
         const main_c = try std.fs.cwd().createFile(
@@ -252,7 +252,7 @@ fn templateC(allocator: Allocator, flags: Flags) !void {
 
 fn templateCpp(allocator: Allocator, flags: Flags) !void {
     var contents = std.ArrayList(u8){};
-    defer contents.clearAndFree(allocator); 
+    defer contents.deinit(allocator);
 
     if (try askOverride(allocator, "main.cpp")) {
         const main_cpp = try std.fs.cwd().createFile(
