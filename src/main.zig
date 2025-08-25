@@ -42,26 +42,49 @@ fn fileExists(file_path: []const u8) !bool {
     return true;
 }
 
-fn addStep(flags: Flags, arr: *std.ArrayList(u8), step: []const u8, body: []const u8) !void {
-    try arr.appendSlice(step);
-    try arr.appendSlice("\n\t");
-    if (flags.silent) try arr.append('@');
-    try arr.appendSlice(body);
-    try arr.appendSlice("\n\n");
+fn stdinReadUntilDeliminerAlloc(allocator: Allocator, deliminer: u8) ![]const u8 {
+    var stdin_buf: [1]u8 = undefined;
+    var stdin = std.fs.File.stdin().reader(&stdin_buf);
+
+    var arr = std.ArrayList(u8){};
+    defer arr.clearAndFree(allocator);
+
+    while (true) {
+        const read = try stdin.interface.takeByte();
+
+        if (read != deliminer) {
+            try arr.append(allocator, read);
+        } else {
+            break;
+        }
+    }
+
+    return try arr.toOwnedSlice(allocator);
+}
+
+fn addStep(
+    allocator: Allocator,
+    flags: Flags,
+    arr: *std.ArrayList(u8),
+    step: []const u8,
+    body: []const u8
+) !void {
+    try arr.appendSlice(allocator, step);
+    try arr.appendSlice(allocator, "\n\t");
+    if (flags.silent) try arr.append(allocator, '@');
+    try arr.appendSlice(allocator, body);
+    try arr.appendSlice(allocator, "\n\n");
 }
 
 fn askOverride(allocator: Allocator, file_name: []const u8) !bool {
-    const stdin = std.io.getStdIn().reader();
-
     if (try fileExists(file_name)) {
         std.debug.print("{s} already exists!\n", .{file_name});
         std.debug.print("Do you want to override? [y/N] ", .{});
-        const choice = (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 64)).?;
+
+        const choice = try stdinReadUntilDeliminerAlloc(allocator, '\n');
         defer allocator.free(choice);
 
-        if (!std.mem.eql(u8, choice, "y") and !std.mem.eql(u8, choice, "Y")) {
-            return false;
-        }
+        return (std.mem.eql(u8, choice, "y") or std.mem.eql(u8, choice, "Y"));
     }
 
     return true;
@@ -145,51 +168,52 @@ pub fn main() !void {
 }
 
 fn templateNew(allocator: Allocator, flags: Flags) !void {
-    if (try askOverride(allocator, "Makefile")) {
-        const stdin = std.io.getStdIn().reader();
+    if (!try askOverride(allocator, "Makefile")) return;
 
-        var contents = std.ArrayList(u8).init(allocator);
-        defer contents.deinit(); 
+    var contents = std.ArrayList(u8){};
+    defer contents.clearAndFree(allocator); 
 
-        std.debug.print("build:\n", .{});
-        const build_step = (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024)).?;
-        defer allocator.free(build_step);
-        if (build_step.len > 0) {
-            try addStep(flags, &contents, "build:", build_step);
-            std.debug.print("\n", .{});
-        } else {
-            std.debug.print("Build step can't be empty!\n", .{});
-            return error.EmptyBuildStep;
-        }
+    std.debug.print("build:\n", .{});
+    const build_step = try stdinReadUntilDeliminerAlloc(allocator, '\n');
+    defer allocator.free(build_step);
 
-        std.debug.print("run:\n", .{});
-        const run_step = (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024)).?;
-        defer allocator.free(run_step);
-        if (run_step.len > 0) {
-            try addStep(flags, &contents, "run: build", run_step);
-            std.debug.print("\n", .{});
-        }
-
-        std.debug.print("clean:\n", .{});
-        const clean_step = (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024)).?;
-        defer allocator.free(clean_step);
-        if (clean_step.len > 0) {
-            try addStep(flags, &contents, "clean:", clean_step);
-        }
-
-        const file = try std.fs.cwd().createFile(
-            "Makefile",
-            .{ .read = true, },
-        );
-        defer file.close();
-
-        try file.writeAll(contents.items);
+    if (build_step.len > 0) {
+        try addStep(allocator, flags, &contents, "build:", build_step);
+        std.debug.print("\n", .{});
+    } else {
+        std.debug.print("Build step can't be empty!\n", .{});
+        return error.EmptyBuildStep;
     }
+
+    std.debug.print("run:\n", .{});
+    const run_step = try stdinReadUntilDeliminerAlloc(allocator, '\n');
+    defer allocator.free(run_step);
+
+    if (run_step.len > 0) {
+        try addStep(allocator, flags, &contents, "run: build", run_step);
+        std.debug.print("\n", .{});
+    }
+
+    std.debug.print("clean:\n", .{});
+    const clean_step = try stdinReadUntilDeliminerAlloc(allocator, '\n');
+    defer allocator.free(clean_step);
+
+    if (clean_step.len > 0) {
+        try addStep(allocator, flags, &contents, "clean:", clean_step);
+    }
+
+    const file = try std.fs.cwd().createFile(
+        "Makefile",
+        .{ .read = true, },
+    );
+    defer file.close();
+
+    try file.writeAll(contents.items);
 }
 
 fn templateC(allocator: Allocator, flags: Flags) !void {
-    var contents = std.ArrayList(u8).init(allocator);
-    defer contents.deinit(); 
+    var contents = std.ArrayList(u8){};
+    defer contents.clearAndFree(allocator); 
 
     if (try askOverride(allocator, "main.c")) {
         const main_c = try std.fs.cwd().createFile(
@@ -210,13 +234,16 @@ fn templateC(allocator: Allocator, flags: Flags) !void {
         defer makefile.close();
 
         if (flags.warnings) {
-            try contents.appendSlice("warn_flags = " ++ c_warn_flags ++ "\n\n");
-            try addStep(flags, &contents, "build:", "gcc -o main main.c $(warn_flags)");
+            try contents.appendSlice(
+                allocator,
+                "warn_flags = " ++ c_warn_flags ++ "\n\n"
+            );
+            try addStep(allocator, flags, &contents, "build:", "gcc -o main main.c $(warn_flags)");
         } else {
-            try addStep(flags, &contents, "build:", "gcc -o main main.c");
+            try addStep(allocator, flags, &contents, "build:", "gcc -o main main.c");
         }
-        try addStep(flags, &contents, "run: build", "./main");
-        try addStep(flags, &contents, "clean:", "rm main");
+        try addStep(allocator, flags, &contents, "run: build", "./main");
+        try addStep(allocator, flags, &contents, "clean:", "rm main");
         try makefile.writeAll(contents.items);
 
         std.debug.print("Created: Makefile\n", .{});
@@ -224,8 +251,8 @@ fn templateC(allocator: Allocator, flags: Flags) !void {
 }
 
 fn templateCpp(allocator: Allocator, flags: Flags) !void {
-    var contents = std.ArrayList(u8).init(allocator);
-    defer contents.deinit(); 
+    var contents = std.ArrayList(u8){};
+    defer contents.clearAndFree(allocator); 
 
     if (try askOverride(allocator, "main.cpp")) {
         const main_cpp = try std.fs.cwd().createFile(
@@ -247,13 +274,16 @@ fn templateCpp(allocator: Allocator, flags: Flags) !void {
         defer makefile.close();
 
         if (flags.warnings) {
-            try contents.appendSlice("warn_flags = " ++ c_warn_flags ++ "\n\n");
-            try addStep(flags, &contents, "build:", "g++ -o main main.cpp $(warn_flags)");
+            try contents.appendSlice(
+                allocator,
+                "warn_flags = " ++ c_warn_flags ++ "\n\n"
+            );
+            try addStep(allocator, flags, &contents, "build:", "g++ -o main main.cpp $(warn_flags)");
         } else {
-            try addStep(flags, &contents, "build:", "g++ -o main main.cpp");
+            try addStep(allocator, flags, &contents, "build:", "g++ -o main main.cpp");
         }
-        try addStep(flags, &contents, "run: build", "./main");
-        try addStep(flags, &contents, "clean:", "rm main");
+        try addStep(allocator, flags, &contents, "run: build", "./main");
+        try addStep(allocator, flags, &contents, "clean:", "rm main");
         try makefile.writeAll(contents.items);
 
         std.debug.print("Created: Makefile\n", .{});
@@ -261,9 +291,6 @@ fn templateCpp(allocator: Allocator, flags: Flags) !void {
 }
 
 fn templateZig(allocator: Allocator, _: Flags) !void {
-    var contents = std.ArrayList(u8).init(allocator);
-    defer contents.deinit(); 
-
     if (try askOverride(allocator, "src/main.zig")) {
         _ = try std.fs.cwd().makeOpenPath("src", .{});
 
