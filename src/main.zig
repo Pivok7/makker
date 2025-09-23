@@ -43,23 +43,17 @@ fn fileExists(file_path: []const u8) !bool {
 }
 
 fn stdinReadUntilDeliminerAlloc(allocator: Allocator, deliminer: u8) ![]const u8 {
-    var stdin_buf: [1]u8 = undefined;
+    var stdin_buf: [1024]u8 = undefined;
     var stdin = std.fs.File.stdin().reader(&stdin_buf);
 
-    var arr = std.ArrayList(u8){};
-    defer arr.deinit(allocator);
+    var alloc_writer = std.io.Writer.Allocating.init(allocator);
 
-    while (true) {
-        const read = try stdin.interface.takeByte();
+    _ = try stdin.interface.streamDelimiter(
+        &alloc_writer.writer,
+        deliminer
+    );
 
-        if (read != deliminer) {
-            try arr.append(allocator, read);
-        } else {
-            break;
-        }
-    }
-
-    return try arr.toOwnedSlice(allocator);
+    return try alloc_writer.toOwnedSlice();
 }
 
 fn addStep(
