@@ -5,6 +5,7 @@ const embed_main_c = @embedFile("templates/c/main.c");
 const embed_main_cpp = @embedFile("templates/cpp/main.cpp");
 const embed_main_zig = @embedFile("templates/zig/main.zig");
 const embed_build_zig = @embedFile("templates/zig/build.zig");
+const embed_gitignore_zig = @embedFile("templates/zig/.gitignore");
 
 const c_warn_flags: []const u8 = "-Wall -Wextra -Wno-unused -pedantic";
 
@@ -309,5 +310,17 @@ fn templateZig(allocator: Allocator, _: Flags) !void {
         try build_zig.writeAll(embed_build_zig);
 
         std.debug.print("Created: build.zig\n", .{});
+    }
+
+    if (try askOverride(allocator, ".gitignore")) {
+        const gitignore = try std.fs.cwd().createFile(
+            ".gitignore",
+            .{ .read = true, },
+        );
+        defer gitignore.close();
+
+        try gitignore.writeAll(embed_gitignore_zig);
+
+        std.debug.print("Created: .gitignore\n", .{});
     }
 }
