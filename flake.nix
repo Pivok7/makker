@@ -32,7 +32,8 @@
             ]);
 
           shellHook = ''
-            echo "zig `zig version`"
+            echo "nushell   `nu -v`"
+            echo "zig       `zig version`"
             exec nu
           '';
         };
