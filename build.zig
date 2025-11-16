@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
         .name = "makker",
         .root_module = exe_mod,
     });
-    
+
     b.installArtifact(exe);
 
     // Run step
