@@ -1,3 +1,1 @@
-Install to custom lacation with:
-
-sudo zig build -Doptimize=ReleaseFast -p /usr/local --prefix-exe-dir bin
+Easily create templates for c, c++ and zig
