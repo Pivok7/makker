@@ -1,0 +1,14 @@
+.{
+    .name = .makker,
+    .version = "1.0.0",
+    .minimum_zig_version = "0.15.2",
+    .fingerprint = 0xafde38eb6abf8b30, // Changing this has security and trust implications.
+
+    .dependencies = .{},
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
