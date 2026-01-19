@@ -4,16 +4,14 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .strip = optimize != .Debug,
-    });
-
     const exe = b.addExecutable(.{
         .name = "makker",
-        .root_module = exe_mod,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .strip = optimize != .Debug,
+        }),
     });
 
     b.installArtifact(exe);

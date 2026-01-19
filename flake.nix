@@ -24,18 +24,9 @@
         in
         pkgs.mkShell {
           packages =
-            (with pkgs; [
-              nushell
-            ])
-            ++ (with pkgs-unstable; [
+            (with pkgs-unstable; [
               zig
             ]);
-
-          shellHook = ''
-            echo "nushell   `nu -v`"
-            echo "zig       `zig version`"
-            exec nu
-          '';
         };
     };
 }
