@@ -10,6 +10,7 @@ const embed_main_cpp = @embedFile("templates/cpp/main.cpp");
 const embed_main_zig = @embedFile("templates/zig/main.zig");
 const embed_build_zig = @embedFile("templates/zig/build.zig");
 const embed_gitignore_zig = @embedFile("templates/zig/.gitignore");
+const embed_flake_nix = @embedFile("templates/nix/flake.nix");
 
 const c_warn_flags: []const u8 = "-Wall -Wextra -Wno-unused -pedantic";
 
@@ -18,6 +19,7 @@ const Templates = enum {
     c,
     cpp,
     zig,
+    nix,
 };
 
 const Flags = packed struct {
@@ -27,7 +29,7 @@ const Flags = packed struct {
 
 fn printHelp() void {
     std.debug.print("How to use?\n", .{});
-    std.debug.print("-> makker <c/cpp/zig> [flags]\n", .{});
+    std.debug.print("-> makker <c/cpp/zig/nix> [flags]\n", .{});
     std.debug.print("\nExamples:\n", .{});
     std.debug.print("-> makker c\n", .{});
     std.debug.print("-> makker cpp --warn -s\n", .{});
@@ -105,6 +107,9 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, arg, "zig")) {
             template = Templates.zig;
             continue;
+        } else if (std.mem.eql(u8, arg, "nix")) {
+            template = Templates.nix;
+            continue;
         } else if (std.mem.startsWith(u8, arg, "--")) {
             std.log.err("Invalid flag \"{s}\"", .{arg});
             std.log.err("Type \"makker --help\" for help", .{});
@@ -130,15 +135,10 @@ pub fn main(init: std.process.Init) !void {
 
     switch (template) {
         .none => printHelp(),
-        .c => {
-            try templateC(allocator, io, flags);
-        },
-        .cpp => {
-            try templateCpp(allocator, io, flags);
-        },
-        .zig => {
-            try templateZig(allocator, io, flags);
-        },
+        .c => try templateC(allocator, io, flags),
+        .cpp => try templateCpp(allocator, io, flags),
+        .zig => try templateZig(allocator, io, flags),
+        .nix => try templateNix(allocator, io, flags),
     }
 }
 
@@ -258,5 +258,22 @@ fn templateZig(allocator: Allocator, io: Io, flags: Flags) !void {
 
         try gitignore.writeStreamingAll(io, embed_gitignore_zig);
         std.debug.print("Created: .gitignore\n", .{});
+    }
+}
+
+fn templateNix(allocator: Allocator, io: Io, flags: Flags) !void {
+    if (flags.silent) std.log.warn("Flag \"silent\" not supported in nix", .{});
+    if (flags.warnings) std.log.warn("Flag \"warnings\" not supported in nig", .{});
+
+    if (try askOverride(allocator, io, "flake.nix")) {
+        const flake_nix = try cwd().createFile(
+            io,
+            "flake.nix",
+            .{ .read = true },
+        );
+        defer flake_nix.close(io);
+
+        try flake_nix.writeStreamingAll(io, embed_flake_nix);
+        std.debug.print("Created: flake.nix\n", .{});
     }
 }
