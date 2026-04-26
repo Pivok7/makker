@@ -1,1 +1,1 @@
-Easily create templates for c, c++ and zig
+My personal template manager for c, c++, zig, and nix
