@@ -1,14 +1,14 @@
 .{
-    .name = .makker,
-    .version = "1.2.1",
+    .name = .main,
+    .version = "0.0.1",
     .minimum_zig_version = "0.16.0",
-    .fingerprint = 0xafde38eb6abf8b30,
+    .fingerprint = 0xffffffffffffffff,
 
     .dependencies = .{},
 
     .paths = .{
+        "src",
         "build.zig",
         "build.zig.zon",
-        "src",
     },
 }

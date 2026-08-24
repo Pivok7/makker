@@ -9,6 +9,7 @@ const embed_main_c = @embedFile("templates/c/main.c");
 const embed_main_cpp = @embedFile("templates/cpp/main.cpp");
 const embed_main_zig = @embedFile("templates/zig/main.zig");
 const embed_build_zig = @embedFile("templates/zig/build.zig");
+const embed_build_zig_zon = @embedFile("templates/zig/build.zig.zon");
 const embed_gitignore_zig = @embedFile("templates/zig/.gitignore");
 const embed_flake_nix = @embedFile("templates/nix/flake.nix");
 
@@ -246,6 +247,18 @@ fn templateZig(allocator: Allocator, io: Io, flags: Flags) !void {
 
         try build_zig.writeStreamingAll(io, embed_build_zig);
         std.debug.print("Created: build.zig\n", .{});
+    }
+
+    if (try askOverride(allocator, io, "build.zig.zon")) {
+        const build_zig = try cwd().createFile(
+            io,
+            "build.zig.zon",
+            .{ .read = true },
+        );
+        defer build_zig.close(io);
+
+        try build_zig.writeStreamingAll(io, embed_build_zig_zon);
+        std.debug.print("Created: build.zig.zon\n", .{});
     }
 
     if (try askOverride(allocator, io, ".gitignore")) {
