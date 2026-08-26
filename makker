@@ -2,7 +2,7 @@
 
 let metadata = {
   name: "makker"
-  version: "2.0.0"
+  version: "2.0.1"
 };
 
 const template_c_main = path self ./templates/c/main.c;
@@ -173,7 +173,9 @@ def "main zig" [
   }
 }
 
-def main [] {
+def --wrapped main [
+  ...args: string
+] {
   print $"> ($metadata | get name) ($metadata | get version)"
   print "Usage: makker c|cpp|zig"
 }
