@@ -1,1 +1,1 @@
-My personal template manager for c, c++, zig, and nix
+My personal template manager for programming

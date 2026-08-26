@@ -5,10 +5,62 @@ let metadata = {
   version: "2.0.0"
 };
 
-let global_opts = {
-  quiet: false
-  force: false
-};
+const template_c_main = path self ./templates/c/main.c;
+const template_cpp_main = path self ./templates/cpp/main.cpp;
+const template_zig_bin_main = path self ./templates/zig/bin/main.zig;
+const template_zig_bin_build = path self ./templates/zig/bin/build.zig;
+const template_zig_bin_build_zon = path self ./templates/zig/bin/build.zig.zon;
+const template_zig_lib_main = path self ./templates/zig/lib/main.zig;
+const template_zig_lib_build = path self ./templates/zig/lib/build.zig;
+const template_zig_lib_build_zon = path self ./templates/zig/lib/build.zig.zon;
+
+def safe_save [
+  pout: path
+  pin: path
+  quiet: bool = false
+  force: bool = false
+] {
+  mut msg = "Created";
+
+  if (($pout | path exists) and not $force) {
+    let override = input $"File ($pout) exists. Override? [y/N] ";
+    if (($override != "y") and ($override != "Y")) {
+      print $"Skipped: ($pout)"
+      return;
+    } else {
+      $msg = "Updated";
+    }
+  }
+
+  cp -f $pin $pout
+  if not $quiet {
+    print $"($msg): ($pout)"
+  }
+}
+
+def safe_save_str [
+  pout: path
+  strin: string
+  quiet: bool = false
+  force: bool = false
+] {
+  mut msg = "Created";
+
+  if (($pout | path exists) and not $force) {
+    let override = input $"File ($pout) exists. Override? [y/N] ";
+    if (($override != "y") and ($override != "Y")) {
+      print $"Skipped: ($pout)"
+      return;
+    } else {
+      $msg = "Updated";
+    }
+  }
+
+  $strin | save -f $pout
+  if not $quiet {
+    print $"($msg): ($pout)"
+  }
+}
 
 def "make add_warnings" [] {
   return "warn_flags = -Wall -Wextra -Wno-unused -pedantic"
@@ -22,14 +74,8 @@ def "main c" [
 ] {
   mut base = "";
 
-  if $quiet {
-    global_opts | update quiet true;
-  }
   if $warn {
       $base ++= $"(make add_warnings) \n\n"
-  }
-  if $force {
-    global_opts | update force true;
   }
 
   $base ++= "build:\n";
@@ -43,10 +89,91 @@ def "main c" [
   $base ++= "clean:\n";
   $base ++= $"        rm ($name)\n";
 
-  print $base
+  safe_save ./main.c $template_c_main $quiet $force
+  safe_save_str Makefile $base $quiet $force
+}
+
+def "main cpp" [
+  --quiet (-q)
+  --warn (-w)
+  --force (-f)
+  --name: string = "main"
+] {
+  mut base = "";
+
+  if $warn {
+      $base ++= $"(make add_warnings) \n\n"
+  }
+
+  $base ++= "build:\n";
+
+  $base ++= $"        g++ -o ($name) main.cpp";
+  if $warn { $base ++= " $(warn_flags)"; }
+  $base ++= "\n";
+
+  $base ++= "run: build\n";
+  $base ++= $"        ./name\n";
+  $base ++= "clean:\n";
+  $base ++= $"        rm ($name)\n";
+
+  safe_save ./main.cpp $template_cpp_main $quiet $force
+  safe_save_str 'Makefile' $base $quiet $force
+}
+
+def "main zig" [
+  --quiet (-q)
+  --warn (-w)
+  --force (-f)
+  --bin
+  --lib,
+  --name: string = "main"
+] {
+  const name_placeholder = "#PROJ_NAME#"
+
+  if ($bin and $lib) {
+    print "Cannot have both --bin and --lib"
+    return;
+  }
+
+  mkdir src
+
+  if ($lib) {
+    safe_save ./src/main.zig $template_zig_lib_main $quiet $force
+
+    let build = open $template_zig_lib_build --raw | str replace $name_placeholder $name;
+    let build_zon = open $template_zig_lib_build_zon --raw | str replace $name_placeholder $name;
+
+    safe_save_str ./build.zig $build $quiet $force
+    safe_save_str ./build.zig.zon $build_zon $quiet $force
+  } else {
+    safe_save ./src/main.zig $template_zig_bin_main $quiet $force
+
+    let build = open $template_zig_bin_build --raw | str replace $name_placeholder $name;
+    let build_zon = open $template_zig_bin_build_zon --raw | str replace $name_placeholder $name;
+
+    safe_save_str ./build.zig $build $quiet $force
+    safe_save_str ./build.zig.zon $build_zon $quiet $force
+  }
+
+  if (open ./build.zig.zon | str contains "0xffffffffffffffff") {
+    if (which zig | is-not-empty) {
+      let output = do -i { zig build } | complete;
+      let msg = ($output | get stderr);
+      let fingerprint = ($msg
+        | split words
+        | where (($it | str starts-with "0x") and ($it != "0xffffffffffffffff"))
+        | first
+      );
+      open ./build.zig.zon --raw
+        | str replace "0xffffffffffffffff" $fingerprint
+        | save ./build.zig.zon -f
+    } else {
+      print "Cannot generate correct fingerprint because zig binary is missing";
+    }
+  }
 }
 
 def main [] {
   print $"> ($metadata | get name) ($metadata | get version)"
-  print "Run `makker -h / --help` to get more info"
+  print "Usage: makker c|cpp|zig"
 }
