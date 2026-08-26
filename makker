@@ -2,7 +2,7 @@
 
 let metadata = {
   name: "makker"
-  version: "2.0.1"
+  version: "2.0.2"
 };
 
 const template_c_main = path self ./templates/c/main.c;
@@ -89,7 +89,7 @@ def "main c" [
   $base ++= "clean:\n";
   $base ++= $"        rm ($name)\n";
 
-  safe_save ./main.c $template_c_main $quiet $force
+  safe_save main.c $template_c_main $quiet $force
   safe_save_str Makefile $base $quiet $force
 }
 
@@ -116,8 +116,8 @@ def "main cpp" [
   $base ++= "clean:\n";
   $base ++= $"        rm ($name)\n";
 
-  safe_save ./main.cpp $template_cpp_main $quiet $force
-  safe_save_str 'Makefile' $base $quiet $force
+  safe_save main.cpp $template_cpp_main $quiet $force
+  safe_save_str Makefile $base $quiet $force
 }
 
 def "main zig" [
@@ -138,21 +138,21 @@ def "main zig" [
   mkdir src
 
   if ($lib) {
-    safe_save ./src/main.zig $template_zig_lib_main $quiet $force
+    safe_save src/main.zig $template_zig_lib_main $quiet $force
 
     let build = open $template_zig_lib_build --raw | str replace $name_placeholder $name;
     let build_zon = open $template_zig_lib_build_zon --raw | str replace $name_placeholder $name;
 
-    safe_save_str ./build.zig $build $quiet $force
-    safe_save_str ./build.zig.zon $build_zon $quiet $force
+    safe_save_str build.zig $build $quiet $force
+    safe_save_str build.zig.zon $build_zon $quiet $force
   } else {
-    safe_save ./src/main.zig $template_zig_bin_main $quiet $force
+    safe_save src/main.zig $template_zig_bin_main $quiet $force
 
     let build = open $template_zig_bin_build --raw | str replace $name_placeholder $name;
     let build_zon = open $template_zig_bin_build_zon --raw | str replace $name_placeholder $name;
 
-    safe_save_str ./build.zig $build $quiet $force
-    safe_save_str ./build.zig.zon $build_zon $quiet $force
+    safe_save_str build.zig $build $quiet $force
+    safe_save_str build.zig.zon $build_zon $quiet $force
   }
 
   if (open ./build.zig.zon | str contains "0xffffffffffffffff") {
