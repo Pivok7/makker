@@ -1,0 +1,52 @@
+#!/usr/bin/env nu
+
+let metadata = {
+  name: "makker"
+  version: "2.0.0"
+};
+
+let global_opts = {
+  quiet: false
+  force: false
+};
+
+def "make add_warnings" [] {
+  return "warn_flags = -Wall -Wextra -Wno-unused -pedantic"
+}
+
+def "main c" [
+  --quiet (-q)
+  --warn (-w)
+  --force (-f)
+  --name: string = "main"
+] {
+  mut base = "";
+
+  if $quiet {
+    global_opts | update quiet true;
+  }
+  if $warn {
+      $base ++= $"(make add_warnings) \n\n"
+  }
+  if $force {
+    global_opts | update force true;
+  }
+
+  $base ++= "build:\n";
+
+  $base ++= $"        gcc -o ($name) main.c";
+  if $warn { $base ++= " $(warn_flags)"; }
+  $base ++= "\n";
+
+  $base ++= "run: build\n";
+  $base ++= $"        ./name\n";
+  $base ++= "clean:\n";
+  $base ++= $"        rm ($name)\n";
+
+  print $base
+}
+
+def main [] {
+  print $"> ($metadata | get name) ($metadata | get version)"
+  print "Run `makker -h / --help` to get more info"
+}
