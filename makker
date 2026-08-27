@@ -2,7 +2,7 @@
 
 let metadata = {
   name: "makker"
-  version: "2.1.0"
+  version: "2.2.0"
 };
 
 const template_c_main = path self ./templates/c/main.c;
@@ -10,7 +10,7 @@ const template_cpp_main = path self ./templates/cpp/main.cpp;
 const template_zig_bin_main = path self ./templates/zig/bin/main.zig;
 const template_zig_bin_build = path self ./templates/zig/bin/build.zig;
 const template_zig_bin_build_zon = path self ./templates/zig/bin/build.zig.zon;
-const template_zig_lib_main = path self ./templates/zig/lib/main.zig;
+const template_zig_lib_root = path self ./templates/zig/lib/root.zig;
 const template_zig_lib_build = path self ./templates/zig/lib/build.zig;
 const template_zig_lib_build_zon = path self ./templates/zig/lib/build.zig.zon;
 
@@ -27,10 +27,10 @@ def safe_save [
     if (($override != "y") and ($override != "Y")) {
       print $"Skipped: ($pout)"
       return;
-    } else {
-      $msg = "Updated";
-    }
+    } else { $msg = "Updated"; }
   }
+
+  if ($force) { $msg = "Updated"; }
 
   $strin | save -f $pout
   if not $quiet {
@@ -56,7 +56,7 @@ def "main c" [
 
   $base ++= "build:\n";
 
-  $base ++= $"\tgcc -o main main.c";
+  $base ++= $"\tgcc -o ($name) main.c";
   if $warn { $base ++= " $(warn_flags)"; }
   $base ++= "\n";
 
@@ -101,30 +101,35 @@ def "main zig" [
   --force (-f)
   --bin
   --lib,
-  --name: string = "main"
+  --name: string
 ] {
   const name_placeholder = "#PROJ_NAME#"
 
   if ($bin and $lib) {
     print "Cannot have both --bin and --lib"
-    return;
+    exit 1;
   }
 
   mkdir src
 
   if ($lib) {
-    safe_save src/main.zig (open $template_zig_lib_main) $quiet $force
+    if $name == null {
+      print "Lib must have a name (hint: use --name flag)"
+      exit 1;
+    }
 
-    let build = open $template_zig_lib_build --raw | str replace $name_placeholder $name;
-    let build_zon = open $template_zig_lib_build_zon --raw | str replace $name_placeholder $name;
+    safe_save src/root.zig (open $template_zig_lib_root) $quiet $force
+
+    let build = open $template_zig_lib_build | str replace $name_placeholder $name;
+    let build_zon = open $template_zig_lib_build_zon | str replace $name_placeholder $name;
 
     safe_save build.zig $build $quiet $force
     safe_save build.zig.zon $build_zon $quiet $force
   } else {
     safe_save src/main.zig (open $template_zig_bin_main) $quiet $force
 
-    let build = open $template_zig_bin_build --raw | str replace $name_placeholder $name;
-    let build_zon = open $template_zig_bin_build_zon --raw | str replace $name_placeholder $name;
+    let build = open $template_zig_bin_build | str replace $name_placeholder ($name | default "main");
+    let build_zon = open $template_zig_bin_build_zon | str replace $name_placeholder ($name | default "main");
 
     safe_save build.zig $build $quiet $force
     safe_save build.zig.zon $build_zon $quiet $force
